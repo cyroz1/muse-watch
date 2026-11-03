@@ -130,13 +130,17 @@ public final class ChatStore: ObservableObject {
 }
 
 extension ChatThread {
-    public static var samples: [ChatThread] {
+    /// A fixed set of sample threads. This is `static let` (not a computed
+    /// property) so `sampleMessages` can key messages by the same IDs; using a
+    /// computed property generated fresh UUIDs on each access and left every
+    /// conversation empty.
+    public static let samples: [ChatThread] = {
         let now = Date()
         return [
             ChatThread(title: "Muse", preview: "I can help with that. What are you working on?", date: now.addingTimeInterval(-120)),
             ChatThread(title: "Muse Design", preview: "The new complication looks great.", date: now.addingTimeInterval(-86_400), unread: true)
         ]
-    }
+    }()
 
     public static var sampleMessages: [UUID: [ChatMessage]] {
         let threads = samples
