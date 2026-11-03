@@ -2,6 +2,8 @@
 
 These findings come from the captured Muse web client. They describe an undocumented, version-dependent protocol. On November 3, 2026, the experimental client completed a live handshake, fetched history, sent one test message in a separate session, and fetched the assistant reply. No account credentials are included.
 
+For the browser-session authentication check, admission-token flow, WebSocket credential handling, and reconstructed chat request shapes, see [muse-auth-chat-protocol.md](muse-auth-chat-protocol.md). That companion note analyzes the November 3 Web Inspector HAR without copying its credential values.
+
 ## Connection at a glance
 
 ```text

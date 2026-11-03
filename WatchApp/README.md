@@ -6,6 +6,8 @@ green outgoing bubbles, grey incoming bubbles, quick replies, a dictation-ready
 composer, and a typing indicator. The protocol engine lives in the `MuseKit`
 Swift package at the repository root.
 
+The browser authentication and chat request contracts are documented in the repository's [authentication and chat transport notes](../muse-auth-chat-protocol.md), including the missing sign-in/session handoff needed for a live Watch connection.
+
 ## What works
 
 - `MuseKit` protocol core (library, runnable checks):
