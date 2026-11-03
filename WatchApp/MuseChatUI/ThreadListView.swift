@@ -1,18 +1,48 @@
 import SwiftUI
 
 /// Conversation list styled after the watchOS Messages app: monogram avatars,
-/// bold sender names, one-line grey previews and a compose button.
+/// bold sender names, one-line grey previews and a "New Message" row pinned
+/// above the conversations.
 public struct ThreadListView: View {
     @ObservedObject private var store: ChatStore
-    @State private var path: [UUID] = []
+    @State private var path: [UUID]
 
-    public init(store: ChatStore) {
+    /// `openFirstThread` is used by the CI screenshot job to land directly on
+    /// the conversation screen.
+    public init(store: ChatStore, openFirstThread: Bool = false) {
         self.store = store
+        _path = State(initialValue: openFirstThread
+            ? (store.threads.first.map { [$0.id] } ?? [])
+            : [])
     }
 
     public var body: some View {
         NavigationStack(path: $path) {
             List {
+                Button {
+                    let thread = store.startNewThread()
+                    path.append(thread.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.footnote.weight(.semibold))
+                        Text("New Message")
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color(white: 0.20))
+                    )
+                }
+                .buttonStyle(.plain)
+                .listRowInsets(EdgeInsets(top: 0, leading: 2, bottom: 4, trailing: 2))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityLabel("New message")
+
                 ForEach(store.threads) { thread in
                     NavigationLink(value: thread.id) {
                         ThreadRow(thread: thread)
@@ -22,17 +52,6 @@ public struct ThreadListView: View {
             }
             .listStyle(.plain)
             .navigationTitle("Messages")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        let thread = store.startNewThread()
-                        path.append(thread.id)
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .accessibilityLabel("New message")
-                }
-            }
             .navigationDestination(for: UUID.self) { threadID in
                 ChatView(store: store, threadID: threadID)
             }
@@ -78,7 +97,7 @@ struct ThreadRow: View {
                     Spacer(minLength: 2)
                     if thread.unread {
                         Circle()
-                            .fill(MuseTheme.sentBubble)
+                            .fill(Color(red: 0.04, green: 0.52, blue: 1.0))
                             .frame(width: 7, height: 7)
                             .accessibilityLabel("Unread")
                     }

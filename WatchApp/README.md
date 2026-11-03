@@ -70,8 +70,10 @@ cd WatchApp && xcodegen generate
 1. `swift run MuseKitChecks` on macOS (protocol regression).
 2. Downloads a watchOS simulator runtime if the runner does not have one.
 3. Builds `WatchApp/MuseWatch.xcodeproj` unsigned for a watch simulator.
-4. Boots the simulator, installs and launches the app, and captures
-   `screenshot.png` as the `muse-watch-simulator` artifact.
+4. Boots the simulator, installs and launches the app, and captures two
+   screenshots: `screenshot-list.png` (thread list) and `screenshot-chat.png`
+   (conversation, opened with the `--open-chat` launch argument). Both ship as
+   the `muse-watch-simulator` artifact.
 
 The screenshot step is best-effort so a flaky simulator boot does not hide a
 successful build. You do not need Xcode installed locally to read the artifact.

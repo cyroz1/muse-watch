@@ -90,14 +90,20 @@ jobs:
 
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
           xcrun simctl install "$UDID" "$APP"
+
           xcrun simctl launch "$UDID" "$BUNDLE_ID"
           sleep 6
-          xcrun simctl io "$UDID" screenshot screenshot.png
+          xcrun simctl io "$UDID" screenshot screenshot-list.png
+
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" --open-chat
+          sleep 5
+          xcrun simctl io "$UDID" screenshot screenshot-chat.png
 
       - name: Upload screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: muse-watch-simulator
-          path: screenshot.png
+          path: screenshot-*.png
           if-no-files-found: warn
