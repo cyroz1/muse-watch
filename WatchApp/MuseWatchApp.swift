@@ -1,4 +1,3 @@
-import MuseChatUI
 import SwiftUI
 
 @main
