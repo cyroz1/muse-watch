@@ -1,0 +1,103 @@
+name: Watch app
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-screenshot:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: MuseKit checks
+        run: swift run MuseKitChecks
+
+      - name: Ensure watchOS simulator runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! xcrun simctl list runtimes | grep -q "watchOS"; then
+            echo "No watchOS runtime installed, downloading..."
+            xcodebuild -downloadPlatform watchOS
+          fi
+          xcrun simctl list runtimes
+
+      - name: Pick or create a watch simulator
+        id: device
+        shell: bash
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          for runtime, devices in data.items():
+              if "watchOS" not in runtime:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable"):
+                      print(device["udid"])
+                      raise SystemExit(0)
+          raise SystemExit(0)
+          ')
+          if [ -z "$UDID" ]; then
+            DEVICE_TYPE=$(xcrun simctl list devicetypes | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.Apple-Watch[^ )]+' | head -n 1)
+            RUNTIME=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.watchOS[^ )]+' | head -n 1)
+            if [ -z "$DEVICE_TYPE" ] || [ -z "$RUNTIME" ]; then
+              echo "No watchOS device type or runtime available" >&2
+              exit 1
+            fi
+            UDID=$(xcrun simctl create "Muse Watch CI" "$DEVICE_TYPE" "$RUNTIME")
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available
+
+      - name: Build for watch simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project WatchApp/MuseWatch.xcodeproj \
+            -scheme MuseWatch \
+            -configuration Debug \
+            -destination "id=${{ steps.device.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Install, launch, screenshot
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          UDID="${{ steps.device.outputs.udid }}"
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$UDID" -b
+
+          APP=$(find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 2 -name "MuseWatch.app" -print -quit)
+          if [ -z "$APP" ]; then
+            echo "Built app not found" >&2
+            exit 1
+          fi
+
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
+          sleep 6
+          xcrun simctl io "$UDID" screenshot screenshot.png
+
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: muse-watch-simulator
+          path: screenshot.png
+          if-no-files-found: warn

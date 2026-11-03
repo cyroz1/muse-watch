@@ -32,24 +32,49 @@ Swift package at the repository root.
 
 Requires Xcode 16 or later and watchOS 10+.
 
-### Option A: XcodeGen
+The Xcode project is committed, so there is no generator step:
+
+```sh
+open WatchApp/MuseWatch.xcodeproj
+```
+
+Pick the `MuseWatch` scheme and a watchOS simulator, then run. The command-line
+equivalent is:
+
+```sh
+xcodebuild -project WatchApp/MuseWatch.xcodeproj -scheme MuseWatch \
+  -destination 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm)' build
+```
+
+If you change `project.yml`, regenerate with XcodeGen:
 
 ```sh
 brew install xcodegen
-cd WatchApp
-xcodegen generate
-open MuseWatch.xcodeproj
+cd WatchApp && xcodegen generate
 ```
 
-### Option B: create the target in Xcode
+### Creating the target by hand instead
 
 1. File > New > Project > watchOS > App, name it `MuseWatch`, SwiftUI, no
    companion app.
 2. File > Add Package Dependencies… > Add Local…, choose the repository root,
    and add the `MuseKit` product to the watch target.
-3. Delete the template `ContentView.swift`/`MuseWatchApp.swift`, then add this
-   folder's `MuseWatchApp.swift` and the whole `MuseChatUI` folder to the target.
+3. Add this folder's `MuseWatchApp.swift` and the whole `MuseChatUI` folder to
+   the target.
 4. Set the minimum deployment to watchOS 10 and run on a simulator or device.
+
+## Continuous integration
+
+`.github/workflows/watch.yml` runs on every push and pull request:
+
+1. `swift run MuseKitChecks` on macOS (protocol regression).
+2. Downloads a watchOS simulator runtime if the runner does not have one.
+3. Builds `WatchApp/MuseWatch.xcodeproj` unsigned for a watch simulator.
+4. Boots the simulator, installs and launches the app, and captures
+   `screenshot.png` as the `muse-watch-simulator` artifact.
+
+The screenshot step is best-effort so a flaky simulator boot does not hide a
+successful build. You do not need Xcode installed locally to read the artifact.
 
 ## Design notes
 

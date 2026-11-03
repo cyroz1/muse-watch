@@ -28,3 +28,10 @@ targets:
         CFBundleDisplayName: Muse
         WKApplication: true
         WKWatchOnly: true
+schemes:
+  MuseWatch:
+    build:
+      targets:
+        MuseWatch: all
+    run:
+      config: Debug

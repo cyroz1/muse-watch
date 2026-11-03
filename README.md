@@ -28,4 +28,4 @@ swift run MuseKitChecks         # 37 cross-implementation checks
 
 The checks replay deterministic vectors from the Node prototype: handshake messages, transport ciphertexts, a framed `GET /chat/history` request, and a response stream. `muse_codec.py` also requires the Python `protobuf` package; its extracted descriptor set is included.
 
-The watch UI itself needs Xcode; see [WatchApp/README.md](WatchApp/README.md) for build instructions and current limitations.
+The watch UI itself needs Xcode; see [WatchApp/README.md](WatchApp/README.md) for build instructions and current limitations. CI builds the watch app and uploads a simulator screenshot as a workflow artifact.
