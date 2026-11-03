@@ -40,7 +40,6 @@ public struct ThreadListView: View {
                 .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets(top: 0, leading: 2, bottom: 4, trailing: 2))
                 .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
                 .accessibilityLabel("New message")
 
                 ForEach(store.threads) { thread in
