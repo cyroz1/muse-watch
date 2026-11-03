@@ -1,0 +1,30 @@
+name: MuseWatch
+options:
+  bundleIdPrefix: ai.muse.research
+  createIntermediateGroups: true
+  deploymentTarget:
+    watchOS: "10.0"
+packages:
+  MuseKit:
+    path: ..
+targets:
+  MuseWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: MuseWatchApp.swift
+      - path: MuseChatUI
+    dependencies:
+      - package: MuseKit
+        product: MuseKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.muse.research.MuseWatch
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "4"
+    info:
+      path: MuseWatch-Info.plist
+      properties:
+        CFBundleDisplayName: Muse
+        WKApplication: true
+        WKWatchOnly: true

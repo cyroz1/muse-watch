@@ -69,14 +69,21 @@ To subscribe on the main chat the client sends `chat.subscribe` with `after_stre
 
 The implementation adds `Content-Type: application/json` for JSON requests, an `x-request-id` if absent, `x-app-id: hatch-web`, and `Accept-Language`; precise subscription record semantics still require verification. It UTF-8 encodes non-GET JSON bodies.
 
+## watchOS port (baseline)
+
+`MuseKit` is a Swift package containing a watchOS-compatible port of the verified client core: Noise XX with CryptoKit, the protobuf frame codec, chunking/reassembly, and a gateway actor over `URLSessionWebSocketTask`. `tools/genvectors.mjs` produces deterministic vectors from the Node prototype (fixed invented keys only); `swift run MuseKitChecks` replays them and checks handshake bytes, transport ciphertexts, request framing and response decoding. This proves byte-level parity with the prototype that passed the live test, not live interoperability from Swift: no Swift handshake has been run against Muse yet.
+
+`WatchApp/` contains a baseline SwiftUI app whose look follows the native Apple Watch Messages app (thread list with monogram avatars, green outgoing and grey incoming bubbles, centered timestamps, quick replies, typing indicator, dictation-ready composer). It uses a demo transport. The UI has not been compiled here because only Command Line Tools are installed; building requires Xcode and a watchOS simulator or device.
+
 ## Remaining work
 
 - Implement and test token acquisition and refresh using a normal authenticated session and secure local storage. The live test reused a captured admission token; its lifetime and refresh behavior remain unknown.
 - Complete server/VM identity and attestation validation. The live experiment recognized the same standard-format response observed in the browser; it did not independently authenticate a pinned Noise peer or implement confidential VM attestation.
 - Live request framing, the text-send payload, node ID and a new session ID were accepted. Verify expiration and reconnect behavior across multiple sessions.
 - A live subscription replay returned an acknowledgement, the user message and assistant completion. Verify incremental live deltas and reconnect behavior.
-- The companion `muse_codec.py` implements protobuf framing only; it has no encryption, authentication, networking or Watch UI. Its local synthetic round-trip checks are not a live interoperability test.
-- Only then port the verified client to watchOS and test it on a simulator or device.
+- Run the Swift client against Muse using a freshly captured admission URL (not the reused token from the Node test) and confirm CryptoKit framing matches the live gateway.
+- Wire `MuseGateway` into the watch app behind a `ChatTransport`, replacing the demo transport, and build/run the UI in Xcode.
+- The companion `muse_codec.py` implements protobuf framing only; it has no encryption, authentication or networking. Its local synthetic round-trip checks are not a live interoperability test.
 
 ## Experimental Noise implementation
 
@@ -103,3 +110,13 @@ The experiment reused the browser capture admission URL and followed the observe
 Using the separate test session, `POST /chat/subscribe` with zero cursors returned newline-delimited records. The initial record was `{type: "res", id, status, payload}` with `payload.subscribed: true` and session, connection, capability and channel metadata. Subsequent records had `{type: "event", event, payload, seq, ts_ms}`. Observed event names included `model_lock.updated`, `agent.status`, `task.status`, `approvals.snapshot`, `message.user`, and `delta.message_done`. The completion payload included `message_id`, `reply_to_message_id`, `session_id`, `status`, and `transcript` among other fields. This confirms replay and completion-event delivery, not yet incremental streaming, reconnect recovery, or a stable public contract.
 
 The JavaScript gateway prototype exposes `subscribe(path, body, onEvent)`, returning separate `ack` and `finished` promises. The helper successfully received the live acknowledgement and assistant completion event.
+
+## Admission credential refresh
+
+The web client holds admission credentials in an in-memory cache scoped by gateway URL and VM name. It looks for a `timeout:` restriction in the notary token and refreshes when that timestamp is less than 60 seconds away; a forced refresh sends `force_refresh: true` to `/api/hatch/token`. A notary value prefixed `delegation.` is endorsed for the gateway and `/v1/noise` before use. The captured endorsement contained timeout, hostname, and URI-prefix restrictions. Its contents and expiration are sensitive and are not included here.
+
+`muse_admission.mjs` is an experimental implementation of this observed cache and endpoint request. It takes an authenticated fetch function and, for delegation tokens, a caller-supplied endorser; it does not sign users in, acquire browser cookies, or implement endorsement. Its behavior has synthetic tests only and is not a live authentication or renewal test.
+
+## Reconnection observation
+
+A live test subscribed to the separate test session with both cursors at zero, recorded the maximum observed stream sequence and the message/chat sequence, disconnected, and subscribed again with those cursors. The resumed subscription sent new state snapshots and replayed the earlier `message.user` event even though its chat sequence was below the supplied cursor. The earlier `delta.message_done` was not repeated in this run. Thus, cursors do not establish an exactly-once delivery guarantee; clients should reconcile repeated message events using stable message IDs and event semantics. Snapshot records can have sequence numbers higher than message events. This is one observed session, not a complete specification of replay or out-of-order delivery.
