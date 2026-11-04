@@ -390,7 +390,6 @@ public actor MuseGateway {
                 throw GatewayError.subscriptionStatus(status)
             }
             continuation.yield(.acknowledged(record))
-            return
         }
         if record["type"]?.stringValue == "event" {
             continuation.yield(.event(record))

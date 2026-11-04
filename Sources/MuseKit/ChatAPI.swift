@@ -84,8 +84,12 @@ public enum MuseChatProtocol {
         let result = response["result"] ?? response
         guard let events = result["chat_events"]?.arrayValue else { return nil }
         for event in events.reversed() where event["role"]?.stringValue == "assistant" {
-            for key in ["content", "transcript", "text", "message"] {
-                if let value = text(in: event[key]) { return value }
+            if event["display_text_ready"]?.boolValue == true,
+               let value = text(in: event["display_text"]) {
+                return value
+            }
+            for value in [event["payload"], event["content"], event["transcript"], event["text"], event["message"]] {
+                if let value = text(in: value) { return value }
             }
         }
         return nil

@@ -47,9 +47,17 @@ The browser authentication and chat request contracts are documented in the repo
   the transport uses the browser-observed WebSocket query shape directly and
   skips the `/api/hatch/token` request. Token expiry and refresh are unknown;
   the user must import a current value again if it expires.
-- The Watch app was built and launched on the Apple Watch Series 12 (46mm)
-  watchOS 27.2 simulator. This verifies the UI build only, not live Muse auth
-  or gateway interoperability.
+- On November 3, 2026, a user-authorized turn completed on the Apple Watch
+  Series 12 (46mm) watchOS 27.2 simulator. The Watch validated the imported
+  web session, woke the selected standard VM, passed the user's first-use key
+  pin, sent a message, fetched history, and displayed Muse's assistant reply.
+  The `/chat/stream` response ended after its acknowledgement in this run, so
+  the transport used its history fallback. Live history events carried text in
+  `display_text` when ready and in nested `payload.content`; the parser now
+  supports both. This is one version-specific simulator exchange under
+  trust-on-first-use, not independent server identity verification or a
+  physical Watch test. The test Cookie and gateway credential were cleared
+  from simulator Keychain after the run; the approved peer pin remains.
 
 ## What is not wired yet
 
@@ -64,22 +72,19 @@ The browser authentication and chat request contracts are documented in the repo
   HTTP 401; the current public bundle shows that admission receives the
   selected gateway target and optional VM name, while its WebSocket target
   requires a VM ID.
-- No live Watch admission, Noise handshake, or chat exchange has been verified.
-  The saved web session returned `validated` in an earlier Watch check. The
-  later selected-VM `/api/hatch/token` request returned HTTP 401, so the direct
-  WebSocket credential path is now available but still needs a live Watch
-  send/receive check. Admission responses that require notary delegation cannot
-  proceed because the Watch does not have the web client's delegation endorser.
-  Confidential VMs remain blocked pending verified attestation and recovery
-  proof.
+- The selected-VM `/api/hatch/token` request returned HTTP 401, so the live
+  exchange used the current browser WebSocket credential directly. Admission
+  responses that require notary delegation cannot proceed because the Watch
+  does not have the web client's delegation endorser. Confidential VMs remain
+  blocked pending verified attestation and recovery proof.
 - The native Messages app on this watchOS simulator had no conversations. A
   draft addressed to a reserved fictional number did not create a persistent
   thread, so the chat screen was visually compared with Messages' available
   empty state and styled after its message conventions, not verified pixel for
   pixel against a native conversation.
-- MuseKit protocol and chat request/response helpers have synthetic checks. The Watch target was built,
-  installed, and launched in the booted Series 12 simulator. Simulator launch
-  verifies the setup UI only; it does not verify live Muse auth or chat.
+- MuseKit protocol and chat request/response helpers have synthetic checks.
+  The Watch target was built, installed, and launched in the Series 12
+  simulator; one live standard-VM exchange completed as described above.
 
 ## Build the watch app
 
@@ -143,16 +148,14 @@ successful build. You do not need Xcode installed locally to read the artifact.
 - Chat scrolling uses the normal `ScrollView`, so the Digital Crown scrolls the
   conversation without custom gesture code.
 
-## Next milestone
+## Remaining milestones
 
-To complete a live Watch exchange:
+To move beyond the one-turn simulator research result:
 
 1. Provide a supported Muse session handoff; the simulator Cookie import is
    only a research path for an already signed-in web session.
 2. Implement the web client's notary delegation endorser and complete
    independent standard-VM identity checks. Add confidential-VM attestation
    and recovery-proof verification before enabling those VMs.
-3. Use a fresh authorized session to verify admission, Noise, one `/chat/stream`
-   send, and the assistant response on the Watch simulator.
-4. Add history-backed thread loading and subscription cursor reconciliation
-   after the one-turn send/receive flow is live.
+3. Add history-backed thread loading, background subscriptions, and cursor
+   reconciliation for later turns and reconnects.
