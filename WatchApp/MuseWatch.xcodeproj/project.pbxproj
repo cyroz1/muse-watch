@@ -11,16 +11,22 @@
 		0EC4BC73596018F704C78B64 /* MessageBubbleShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF2987C1A3213BED305C4AE /* MessageBubbleShape.swift */; };
 		1C30EA035A7ED9AEA80C9A30 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D539031CDBA268BDD5B6F10F /* ChatView.swift */; };
 		354D88F1AFA5E04F070E7EEB /* MuseKit in Frameworks */ = {isa = PBXBuildFile; productRef = 647C9402FCC200E053823374 /* MuseKit */; };
+		58A0DCF32F13473EC2EC9C3E /* MuseCookieSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1E3EE75972054AA0E0A1BE /* MuseCookieSignInView.swift */; };
 		5BD1B8A45B99662B29D83158 /* MuseTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7236321EE9B7BC427F3748C /* MuseTheme.swift */; };
+		93805B5C166875021B0DFB98 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7EA544EEEB7E9A66EE2F50FA /* Assets.xcassets */; };
 		A975B5AC13914A74D1E3C363 /* MuseWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CAE84F3DF3271947EE130A /* MuseWatchApp.swift */; };
+		AA13F4B7C274236779F2A399 /* MuseGatewayChatTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44CC21A99B6ABCA53152C397 /* MuseGatewayChatTransport.swift */; };
 		B9053D5872F032A60B82407A /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA48DD02A824B59C9C78DA6A /* ChatModels.swift */; };
 		F2EE78C299CAF2B95341FB37 /* ThreadListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB29929740FF4B672F48766 /* ThreadListView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		31CAE84F3DF3271947EE130A /* MuseWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuseWatchApp.swift; sourceTree = "<group>"; };
+		44CC21A99B6ABCA53152C397 /* MuseGatewayChatTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuseGatewayChatTransport.swift; sourceTree = "<group>"; };
+		4A1E3EE75972054AA0E0A1BE /* MuseCookieSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuseCookieSignInView.swift; sourceTree = "<group>"; };
 		556DC927F53DED0372003189 /* MuseWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MuseWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		60897A88961427F7B6B933FF /* muse-watch */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "muse-watch"; path = ..; sourceTree = SOURCE_ROOT; };
+		7EA544EEEB7E9A66EE2F50FA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BCF2987C1A3213BED305C4AE /* MessageBubbleShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleShape.swift; sourceTree = "<group>"; };
 		C3886BCF4E8F77B7A98A48B7 /* TypingIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingIndicator.swift; sourceTree = "<group>"; };
 		CA48DD02A824B59C9C78DA6A /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
@@ -52,9 +58,12 @@
 		37F1A1BDB8A5FA05F302EC6A /* MuseChatUI */ = {
 			isa = PBXGroup;
 			children = (
+				7EA544EEEB7E9A66EE2F50FA /* Assets.xcassets */,
 				CA48DD02A824B59C9C78DA6A /* ChatModels.swift */,
 				D539031CDBA268BDD5B6F10F /* ChatView.swift */,
 				BCF2987C1A3213BED305C4AE /* MessageBubbleShape.swift */,
+				4A1E3EE75972054AA0E0A1BE /* MuseCookieSignInView.swift */,
+				44CC21A99B6ABCA53152C397 /* MuseGatewayChatTransport.swift */,
 				F7236321EE9B7BC427F3748C /* MuseTheme.swift */,
 				FDB29929740FF4B672F48766 /* ThreadListView.swift */,
 				C3886BCF4E8F77B7A98A48B7 /* TypingIndicator.swift */,
@@ -88,6 +97,7 @@
 			buildConfigurationList = 1B894363C2B7FB5D6EBA189D /* Build configuration list for PBXNativeTarget "MuseWatch" */;
 			buildPhases = (
 				381718F885AC780BC35A137F /* Sources */,
+				438EEFF28DEC5E05F044BC6C /* Resources */,
 				2E69C969FEB46DF8417B10F4 /* Frameworks */,
 			);
 			buildRules = (
@@ -135,6 +145,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		438EEFF28DEC5E05F044BC6C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93805B5C166875021B0DFB98 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		381718F885AC780BC35A137F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -143,6 +164,8 @@
 				B9053D5872F032A60B82407A /* ChatModels.swift in Sources */,
 				1C30EA035A7ED9AEA80C9A30 /* ChatView.swift in Sources */,
 				0EC4BC73596018F704C78B64 /* MessageBubbleShape.swift in Sources */,
+				58A0DCF32F13473EC2EC9C3E /* MuseCookieSignInView.swift in Sources */,
+				AA13F4B7C274236779F2A399 /* MuseGatewayChatTransport.swift in Sources */,
 				5BD1B8A45B99662B29D83158 /* MuseTheme.swift in Sources */,
 				A975B5AC13914A74D1E3C363 /* MuseWatchApp.swift in Sources */,
 				F2EE78C299CAF2B95341FB37 /* ThreadListView.swift in Sources */,
@@ -156,7 +179,7 @@
 		04C52E141E11E9F5CFFEEA9C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
 				INFOPLIST_FILE = "MuseWatch-Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = ai.muse.research.MuseWatch;
 				SDKROOT = watchos;
@@ -288,7 +311,7 @@
 		F2AD6F91D6B77E8DF09EC0B9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
 				INFOPLIST_FILE = "MuseWatch-Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = ai.muse.research.MuseWatch;
 				SDKROOT = watchos;

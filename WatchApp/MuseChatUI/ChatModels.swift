@@ -11,12 +11,20 @@ public struct ChatMessage: Identifiable, Equatable, Sendable {
     public let role: ChatRole
     public var text: String
     public var date: Date
+    public var isDelivered: Bool
 
-    public init(id: UUID = UUID(), role: ChatRole, text: String, date: Date = Date()) {
+    public init(
+        id: UUID = UUID(),
+        role: ChatRole,
+        text: String,
+        date: Date = Date(),
+        isDelivered: Bool = false
+    ) {
         self.id = id
         self.role = role
         self.text = text
         self.date = date
+        self.isDelivered = isDelivered
     }
 }
 
@@ -41,8 +49,8 @@ public struct ChatThread: Identifiable, Equatable, Sendable {
     }
 }
 
-/// The chat UI talks to this seam so the baseline app can run with canned
-/// replies while the verified gateway client is wired up.
+/// The chat UI talks to this seam so it can use either canned replies or the
+/// caller-configured Muse gateway transport.
 public protocol ChatTransport: Sendable {
     func reply(to thread: ChatThread, text: String) async throws -> String
 }
@@ -106,6 +114,11 @@ public final class ChatStore: ObservableObject {
         defer { replyingThreadIDs.remove(threadID) }
         do {
             let reply = try await transport.reply(to: thread, text: trimmed)
+            if let outgoingIndex = messagesByThread[threadID]?.lastIndex(where: {
+                $0.role == .user && $0.text == trimmed && !$0.isDelivered
+            }) {
+                messagesByThread[threadID]?[outgoingIndex].isDelivered = true
+            }
             let incoming = ChatMessage(role: .assistant, text: reply, date: Date())
             messagesByThread[threadID, default: []].append(incoming)
             touch(threadID, preview: reply, unread: false)
@@ -147,10 +160,8 @@ extension ChatThread {
         let now = Date()
         return [
             threads[0].id: [
-                ChatMessage(role: .user, text: "Hey Muse, can you help me sketch a watch app?", date: now.addingTimeInterval(-600)),
-                ChatMessage(role: .assistant, text: "Absolutely. Start with the smallest useful screen, then layer in the protocol.", date: now.addingTimeInterval(-540)),
-                ChatMessage(role: .user, text: "What should the chat screen look like?", date: now.addingTimeInterval(-180)),
-                ChatMessage(role: .assistant, text: "I can help with that. What are you working on?", date: now.addingTimeInterval(-120))
+                ChatMessage(role: .user, text: "Hey Muse", date: now.addingTimeInterval(-180), isDelivered: true),
+                ChatMessage(role: .assistant, text: "Hi! How can I help?", date: now.addingTimeInterval(-120))
             ],
             threads[1].id: [
                 ChatMessage(role: .assistant, text: "The new complication looks great.", date: now.addingTimeInterval(-86_400))

@@ -94,11 +94,32 @@ const canonical = new URL(address).href;
   await assert.rejects(missingEndorser.get({vmAddress: address}), /endorser/);
 }
 
+// A target VM ID is preserved for admission and partitions the cache.
+{
+  const requests = [];
+  const provider = new AdmissionProvider({
+    fetchAuthenticated: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {ok: true, json: async () => ({token: `admission-${requests.length}`})};
+    }
+  });
+  const first = await provider.get({vmAddress: 'wss://hatch.metaaivm.com/', vmID: 'vm-one'});
+  const second = await provider.get({vmAddress: 'wss://hatch.metaaivm.com/', vmID: 'vm-two'});
+  assert.equal(first.token, 'admission-1');
+  assert.equal(second.token, 'admission-2');
+  assert.equal(requests[0].vmAddress, 'wss://hatch.metaaivm.com/?vm_id=vm-one');
+  assert.equal(requests[1].vmAddress, 'wss://hatch.metaaivm.com/?vm_id=vm-two');
+}
+
 // Validation and error paths
 {
   const provider = new AdmissionProvider({fetchAuthenticated: async () => ({ok: true, json: async () => ({token: 'x'})})});
   await assert.rejects(provider.get({vmAddress: 'https://user:pass@hatch.metaaivm.com'}), /Invalid gateway address/);
   await assert.rejects(provider.get({vmAddress: 'file:///etc/passwd'}), /Invalid gateway address/);
+  await assert.rejects(provider.get({vmAddress: 'https://hatch.metaaivm.com/?auth_token=secret'}), /Invalid gateway address/);
+  await assert.rejects(provider.get({vmAddress: 'https://hatch.metaaivm.com/?vm_id=one&vm_id=two'}), /Invalid gateway address/);
+  await assert.rejects(provider.get({vmAddress: `https://hatch.metaaivm.com/?vm_id=${'x'.repeat(256)}`}), /Invalid gateway address/);
+  await assert.rejects(provider.get({vmAddress: 'https://hatch.metaaivm.com/?vm_id=one', vmID: 'two'}), /Invalid gateway address/);
 
   const httpError = new AdmissionProvider({fetchAuthenticated: async () => ({ok: false, status: 503})});
   await assert.rejects(httpError.get({vmAddress: address}), /Admission request failed \(503\)/);

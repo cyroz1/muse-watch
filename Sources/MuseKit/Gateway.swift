@@ -35,7 +35,7 @@ public enum GatewaySubscriptionRecord: Equatable, Sendable {
 /// implements Muse's server/VM identity checks (including confidential-VM
 /// attestation and any owner recovery proof) before message 3 is sent.
 public actor MuseGateway {
-    public struct Config: Sendable {
+    public struct Config: Sendable, CustomStringConvertible, CustomDebugStringConvertible {
         public var url: URL
         public var appID: String
         public var helloPayload: Data?
@@ -47,6 +47,32 @@ public actor MuseGateway {
             self.helloPayload = helloPayload
             self.timeout = timeout
         }
+
+        public init(
+            admission: MuseAdmissionCredentials,
+            vmID: String,
+            appID: String = "hatch-web",
+            requestID: String = UUID().uuidString.lowercased(),
+            notaryToken: String? = nil,
+            timeout: TimeInterval = 10
+        ) throws {
+            try self.init(
+                url: admission.webSocketURL(
+                    vmID: vmID,
+                    appID: appID,
+                    requestID: requestID,
+                    notaryToken: notaryToken
+                ),
+                appID: appID,
+                timeout: timeout
+            )
+        }
+
+        public var description: String {
+            "MuseGateway.Config(url: wss://\(url.host ?? "<unknown>")\(url.path)?<redacted>, appID: \(appID))"
+        }
+
+        public var debugDescription: String { description }
     }
 
     public struct Hello: Sendable {
@@ -54,6 +80,18 @@ public actor MuseGateway {
         public let handshakeHash: Data
         public let clientNonce: Data?
         public let payload: Data
+
+        public init(
+            serverStaticPublicKey: Data,
+            handshakeHash: Data,
+            clientNonce: Data?,
+            payload: Data
+        ) {
+            self.serverStaticPublicKey = serverStaticPublicKey
+            self.handshakeHash = handshakeHash
+            self.clientNonce = clientNonce
+            self.payload = payload
+        }
     }
 
     /// Returns the payload for handshake message 3 (for example a confidential
@@ -69,6 +107,7 @@ public actor MuseGateway {
         let result: PendingResult
         var status = 0
         var bytes: [UInt8] = []
+        var jsonLines = MuseJSONLinesDecoder()
         var acknowledged = false
     }
 
@@ -89,7 +128,11 @@ public actor MuseGateway {
         self.appID = appID
     }
 
-    public static func connect(config: Config, verify: @escaping Verifier) async throws -> MuseGateway {
+    public static func connect(
+        config: Config,
+        prepareConnection: @escaping @Sendable () async throws -> Void = {},
+        verify: @escaping Verifier
+    ) async throws -> MuseGateway {
         guard config.url.scheme == "wss",
               config.url.host == "hatch.metaaivm.com",
               config.url.path == "/v1/noise" else {
@@ -112,6 +155,11 @@ public actor MuseGateway {
         task.resume()
 
         do {
+            // The web client starts opening the socket, wakes the selected VM,
+            // then sends the first Noise frame. Keep lifecycle preparation
+            // inside the same timeout and fail before message 1 on errors.
+            try await withTimeout(config.timeout, prepareConnection)
+
             let noise = NoiseXXInitiator()
             let message1 = try noise.message1(payload: helloPayload)
             try await withTimeout(config.timeout) { try await task.send(.data(message1)) }
@@ -281,6 +329,7 @@ public actor MuseGateway {
             entry.status = status
             if !body.isEmpty { try consume(body, into: &entry) }
             if end {
+                try finishSubscriptionBody(&entry)
                 pending[frame.streamID] = nil
                 finish(entry, outcome: .success(()))
             } else {
@@ -290,6 +339,7 @@ public actor MuseGateway {
         case .body(let data, let end):
             if !data.isEmpty { try consume(data, into: &entry) }
             if end {
+                try finishSubscriptionBody(&entry)
                 pending[frame.streamID] = nil
                 finish(entry, outcome: .success(()))
             } else {
@@ -304,28 +354,36 @@ public actor MuseGateway {
             entry.bytes.append(contentsOf: data)
 
         case .subscription(let continuation):
-            entry.bytes.append(contentsOf: data)
-            while let newline = entry.bytes.firstIndex(of: 0x0A) {
-                let line = Data(entry.bytes[..<newline])
-                entry.bytes.removeFirst(newline + 1)
-                try dispatch(line: trimCarriageReturn(line), entry: &entry, continuation: continuation)
+            let records: [JSONValue]
+            do {
+                records = try entry.jsonLines.append(data)
+            } catch {
+                throw GatewayError.protocolViolation("invalid subscription record")
+            }
+            for record in records {
+                try dispatch(record: record, entry: &entry, continuation: continuation)
             }
         }
     }
 
-    private func dispatch(
-        line: Data,
-        entry: inout Pending,
-        continuation: AsyncThrowingStream<GatewaySubscriptionRecord, Error>.Continuation
-    ) throws {
-        guard !line.isEmpty else { return }
-        let record: JSONValue
+    private func finishSubscriptionBody(_ entry: inout Pending) throws {
+        guard case .subscription(let continuation) = entry.result else { return }
+        let records: [JSONValue]
         do {
-            record = try JSONValue.decode(line)
+            records = try entry.jsonLines.finish()
         } catch {
             throw GatewayError.protocolViolation("invalid subscription record")
         }
+        for record in records {
+            try dispatch(record: record, entry: &entry, continuation: continuation)
+        }
+    }
 
+    private func dispatch(
+        record: JSONValue,
+        entry: inout Pending,
+        continuation: AsyncThrowingStream<GatewaySubscriptionRecord, Error>.Continuation
+    ) throws {
         if !entry.acknowledged {
             entry.acknowledged = true
             if record["type"]?.stringValue == "res", let status = record["status"]?.intValue, status >= 400 {
@@ -337,11 +395,6 @@ public actor MuseGateway {
         if record["type"]?.stringValue == "event" {
             continuation.yield(.event(record))
         }
-    }
-
-    private func trimCarriageReturn(_ data: Data) -> Data {
-        if data.last == 0x0D { return data.dropLast() }
-        return data
     }
 
     private func finish(_ entry: Pending, outcome: Result<Void, Error>) {

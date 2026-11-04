@@ -63,20 +63,29 @@ struct ThreadRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(white: 0.42), Color(white: 0.30)],
-                            startPoint: .top,
-                            endPoint: .bottom
+            if thread.title.localizedCaseInsensitiveContains("Muse") {
+                Image("MuseAvatar")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 34, height: 34)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.16), lineWidth: 0.6))
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(white: 0.42), Color(white: 0.30)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
                         )
-                    )
-                Text(thread.initials)
-                    .font(.system(.caption2, design: .rounded).weight(.semibold))
-                    .foregroundStyle(.white)
+                    Text(thread.initials)
+                        .font(.system(.caption2, design: .rounded).weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 34, height: 34)
             }
-            .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {

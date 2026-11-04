@@ -1,15 +1,13 @@
 import SwiftUI
 
 /// A single conversation, laid out like watchOS Messages: centered timestamps,
-/// green outgoing bubbles, grey incoming bubbles, quick replies and a composer.
+/// blue outgoing bubbles, grey incoming bubbles and a compact composer.
 public struct ChatView: View {
     @ObservedObject private var store: ChatStore
     private let threadID: UUID
 
     @State private var draft = ""
     @FocusState private var composerFocused: Bool
-
-    private let quickReplies = ["On my way!", "Okay", "Sounds good"]
 
     public init(store: ChatStore, threadID: UUID) {
         self.store = store
@@ -56,29 +54,46 @@ public struct ChatView: View {
                     }
 
                     Color.clear
-                        .frame(height: 1)
+                        .frame(height: Self.composerReserveHeight)
                         .id(Self.bottomID)
                 }
                 .padding(.horizontal, MuseTheme.Metric.horizontalMargin)
                 .padding(.top, 2)
             }
             .scrollIndicators(.hidden)
+            .ignoresSafeArea(.container, edges: .bottom)
             .onAppear {
                 store.markRead(threadID)
                 scrollToBottom(proxy, animated: false)
             }
-            .onChange(of: messages.count) { _ in
+            .onChange(of: messages.count) { _, _ in
                 scrollToBottom(proxy, animated: true)
             }
-            .onChange(of: store.isReplying(in: threadID)) { _ in
+            .onChange(of: store.isReplying(in: threadID)) { _, _ in
                 scrollToBottom(proxy, animated: true)
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .overlay(alignment: .bottom) {
+            composer
+                .offset(y: 16)
+        }
         .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Image("MuseAvatar")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 0.6))
+                .accessibilityLabel("\(title) contact")
+            }
+        }
     }
 
     private static let bottomID = "chat-bottom"
+    private static let composerReserveHeight: CGFloat = 58
 
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
         let action = { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
@@ -90,7 +105,7 @@ public struct ChatView: View {
     }
 
     private func showsTimestamp(at index: Int) -> Bool {
-        guard index > 0 else { return true }
+        guard index > 0 else { return false }
         return messages[index].date.timeIntervalSince(messages[index - 1].date) > 5 * 60
     }
 
@@ -104,68 +119,43 @@ public struct ChatView: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 6) {
-            if draft.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(quickReplies, id: \.self) { reply in
-                            Button {
-                                send(reply)
-                            } label: {
-                                Text(reply)
-                                    .font(.footnote)
-                                    .lineLimit(1)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule().fill(MuseTheme.composerBackground)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 2)
-                }
-                .scrollIndicators(.hidden)
-                .transition(.opacity)
+        HStack(spacing: 8) {
+            Button {
+                composerFocused = true
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 14, weight: .medium))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .buttonBorderShape(.circle)
+            .frame(width: 32, height: 32)
+            .accessibilityLabel("Dictate message")
 
-            HStack(spacing: 6) {
-                TextField("Message", text: $draft)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .focused($composerFocused)
-                    .submitLabel(.send)
-                    .onSubmit { send(draft) }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 17, style: .continuous)
-                            .fill(MuseTheme.composerBackground)
-                    )
+            TextField("message", text: $draft)
+                .focused($composerFocused)
+                .submitLabel(.send)
+                .onSubmit { if canSend { send(draft) } }
+                .controlSize(.mini)
+                .frame(width: 140, height: 32)
+            .accessibilityLabel("Message")
 
+            if canSend {
                 Button {
                     send(draft)
                 } label: {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            Circle().fill(
-                                canSend ? MuseTheme.sentBubble : Color(white: 0.28)
-                            )
-                        )
+                        .fontWeight(.semibold)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
+                .buttonBorderShape(.circle)
+                .tint(MuseTheme.sentBubble)
                 .accessibilityLabel("Send")
             }
         }
-        .padding(.horizontal, 4)
-        .padding(.top, 6)
-        .padding(.bottom, 2)
-        .background(.thinMaterial)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.horizontal, 8)
     }
 
     private var canSend: Bool {
@@ -195,17 +185,26 @@ struct MessageBubbleRow: View {
                 Spacer(minLength: MuseTheme.Metric.minimumEdgeSpace)
             }
 
-            Text(message.text)
-                .font(.body)
-                .multilineTextAlignment(.leading)
-                .foregroundStyle(isFromCurrentUser ? .white : .primary)
-                .padding(.horizontal, MuseTheme.Metric.bubblePaddingHorizontal)
-                .padding(.vertical, MuseTheme.Metric.bubblePaddingVertical)
-                .background(
-                    MessageBubbleShape(isFromCurrentUser: isFromCurrentUser)
-                        .fill(isFromCurrentUser ? MuseTheme.sentBubble : MuseTheme.receivedBubble)
-                )
-                .accessibilityLabel("\(isFromCurrentUser ? "You" : "Muse"): \(message.text)")
+            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 2) {
+                Text(message.text)
+                    .font(.body)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(isFromCurrentUser ? .white : .primary)
+                    .padding(.horizontal, MuseTheme.Metric.bubblePaddingHorizontal)
+                    .padding(.vertical, MuseTheme.Metric.bubblePaddingVertical)
+                    .background(
+                        MessageBubbleShape(isFromCurrentUser: isFromCurrentUser)
+                            .fill(isFromCurrentUser ? MuseTheme.sentBubble : MuseTheme.receivedBubble)
+                    )
+                    .accessibilityLabel("\(isFromCurrentUser ? "You" : "Muse"): \(message.text)")
+
+                if isFromCurrentUser && message.isDelivered {
+                    Text("Delivered")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 4)
+                }
+            }
 
             if !isFromCurrentUser {
                 Spacer(minLength: MuseTheme.Metric.minimumEdgeSpace)

@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Palette and metrics tuned to look at home next to the native watchOS
-/// Messages app: green outgoing bubbles, grey incoming bubbles, small centered
-/// timestamps and generous rounded corners.
+/// Palette and metrics tuned to match the native watchOS Messages conversation.
 public enum MuseTheme {
-    public static let sentBubble = Color(red: 0.20, green: 0.78, blue: 0.35)
+    public static let sentBubble = Color(red: 0.04, green: 0.52, blue: 1.0)
     public static let receivedBubble = Color(white: 0.21)
     public static let composerBackground = Color(white: 0.18)
     public static let timestamp = Color.secondary

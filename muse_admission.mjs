@@ -29,9 +29,20 @@ export class AdmissionProvider {
     this.generations = new Map();
     this.clearGeneration = 0;
   }
-  async get({vmAddress, vmName, forceRefresh = false}) {
+  async get({vmAddress, vmID, vmName, forceRefresh = false}) {
     const address = new URL(vmAddress);
-    if (!['https:', 'wss:'].includes(address.protocol) || address.username || address.password || address.search || address.hash) throw new Error('Invalid gateway address');
+    const validVMID = value => typeof value === 'string' && value.length > 0 && value.trim() === value && value.length <= 255;
+    const vmIds = address.searchParams.getAll('vm_id');
+    if ((vmID !== undefined && !validVMID(vmID)) ||
+        (vmIds.length > 0 && (vmIds.length !== 1 || !validVMID(vmIds[0]) || (vmID !== undefined && vmIds[0] !== vmID)))) {
+      throw new Error('Invalid gateway address');
+    }
+    if (vmID !== undefined && vmIds.length === 0) address.searchParams.set('vm_id', vmID);
+    const queryKeys = [...new Set(address.searchParams.keys())];
+    if (!['https:', 'wss:'].includes(address.protocol) || address.username || address.password || address.hash ||
+        (queryKeys.length > 0 && (queryKeys.length !== 1 || queryKeys[0] !== 'vm_id' || address.searchParams.getAll('vm_id').length !== 1))) {
+      throw new Error('Invalid gateway address');
+    }
     const cacheKey = JSON.stringify([address.href, vmName || null]);
     if (forceRefresh) { this.cache.delete(cacheKey); this.generations.set(cacheKey, (this.generations.get(cacheKey) || 0) + 1); }
     const generation = this.generations.get(cacheKey) || 0;

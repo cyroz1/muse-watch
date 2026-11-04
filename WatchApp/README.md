@@ -1,12 +1,12 @@
 # Muse Watch app
 
-A baseline watchOS app whose chat UI mirrors the native Apple Watch Messages app:
-monogram avatars and one-line previews in the thread list, centered timestamps,
-green outgoing bubbles, grey incoming bubbles, quick replies, a dictation-ready
-composer, and a typing indicator. The protocol engine lives in the `MuseKit`
+A baseline watchOS app whose chat UI follows the native Apple Watch Messages
+conversation: contact avatar, blue outgoing bubbles with delivery text, grey
+incoming bubbles, centered timestamps, and a compact composer with a dictation
+button. The Muse avatar is a still extracted from the user-provided video. The protocol engine lives in the `MuseKit`
 Swift package at the repository root.
 
-The browser authentication and chat request contracts are documented in the repository's [authentication and chat transport notes](../muse-auth-chat-protocol.md), including the missing sign-in/session handoff needed for a live Watch connection.
+The browser authentication and chat request contracts are documented in the repository's [authentication and chat transport notes](../muse-auth-chat-protocol.md). They remain research observations rather than a supported Muse API.
 
 ## What works
 
@@ -19,16 +19,67 @@ The browser authentication and chat request contracts are documented in the repo
   - Verified byte-for-byte against vectors generated from the Node prototype
     that completed a live Muse handshake (`swift run MuseKitChecks`).
 - App shell with Messages-style thread list and conversation screen.
-- `DemoTransport` canned replies so the UI runs before gateway wiring.
+- `MuseGatewayChatTransport` for text turns over the encrypted gateway. It
+  validates the supplied session, obtains admission, wakes the selected VM,
+  waits for peer verification before Noise message 3, sends `/chat/stream`,
+  tracks session IDs per local thread, and falls back to `/chat/history` when
+  the stream ends without assistant text.
+- A standard-VM first-use pin scoped to the account and VM. A user decision
+  allows the first Noise static key to be stored in Keychain; later key changes
+  are rejected. This is trust on first use, not independent first-key identity
+  verification.
+- `DemoTransport` for normal app launches and the `--open-chat` screenshot path.
+- A debug-only `--import-muse-cookie` screen can store a pasted Muse browser
+  Cookie header in the simulator Keychain and validate it with
+  `/api/auth/check`. A headless simulator can use
+  `--import-muse-cookie-file` to read and delete a one-time cache file. Both
+  paths send the header only to HTTPS requests on `muse.ai`. The transferred
+  browser session returned `validated` on Watch and remained valid after app
+  relaunch. The screen accepts the selected gateway URL, VM ID (or a `vm_id`
+  query item), and optional VM name for source-derived admission requests.
+  This remains a simulator research workaround, not a supported Muse sign-in
+  or Watch handoff. The app does not auto-check the saved cookie at launch.
+- The setup screen accepts either a raw gateway `auth_token` or a current Muse
+  WebSocket URL. It validates the host and selected VM, then stores the
+  credential URL in device-local Keychain scoped to the validated account and
+  VM. A headless simulator can use `--import-muse-gateway-credential-file` to
+  read and delete `Library/Caches/muse-gateway-credential.txt`. When supplied,
+  the transport uses the browser-observed WebSocket query shape directly and
+  skips the `/api/hatch/token` request. Token expiry and refresh are unknown;
+  the user must import a current value again if it expires.
+- The Watch app was built and launched on the Apple Watch Series 12 (46mm)
+  watchOS 27.2 simulator. This verifies the UI build only, not live Muse auth
+  or gateway interoperability.
 
 ## What is not wired yet
 
-- The app uses `DemoTransport`, not `MuseGateway`. Connecting needs a verified
-  admission path (browser session, token refresh, VM attestation) that the
-  research package deliberately leaves to the caller.
-- The UI has not been compiled or run here: this checkout only has Command Line
-  Tools, and SwiftUI/watchOS builds require Xcode. Syntax was checked, not the
-  full watchOS build.
+- The normal app launch uses `DemoTransport`. In a debug simulator build, the
+  app opens the existing-session setup screen by default; after session
+  validation and VM selection it opens `MuseGatewayChatTransport`.
+- A live `muse.ai` browser session validated successfully, but its returned
+  account access token received HTTP 401 when used as a Bearer token without
+  browser cookies on the session-check and admission routes. The simulator's
+  imported Cookie did validate the Watch session. Earlier admission probes
+  used the generic gateway origin without the selected VM context and returned
+  HTTP 401; the current public bundle shows that admission receives the
+  selected gateway target and optional VM name, while its WebSocket target
+  requires a VM ID.
+- No live Watch admission, Noise handshake, or chat exchange has been verified.
+  The saved web session returned `validated` in an earlier Watch check. The
+  later selected-VM `/api/hatch/token` request returned HTTP 401, so the direct
+  WebSocket credential path is now available but still needs a live Watch
+  send/receive check. Admission responses that require notary delegation cannot
+  proceed because the Watch does not have the web client's delegation endorser.
+  Confidential VMs remain blocked pending verified attestation and recovery
+  proof.
+- The native Messages app on this watchOS simulator had no conversations. A
+  draft addressed to a reserved fictional number did not create a persistent
+  thread, so the chat screen was visually compared with Messages' available
+  empty state and styled after its message conventions, not verified pixel for
+  pixel against a native conversation.
+- MuseKit protocol and chat request/response helpers have synthetic checks. The Watch target was built,
+  installed, and launched in the booted Series 12 simulator. Simulator launch
+  verifies the setup UI only; it does not verify live Muse auth or chat.
 
 ## Build the watch app
 
@@ -87,18 +138,21 @@ successful build. You do not need Xcode installed locally to read the artifact.
 - Bubble tails are a small overlapping rounded shape at the bottom corner, the
   same visual device Messages uses at this size.
 - Timestamps appear centered between groups when more than five minutes pass.
-- Quick replies sit above the composer while the draft is empty, echoing the
-  watch Messages reply screen.
+- The conversation uses a compact, single-line composer so the message history
+  gets most of the screen, like native Messages.
 - Chat scrolling uses the normal `ScrollView`, so the Digital Crown scrolls the
   conversation without custom gesture code.
 
 ## Next milestone
 
-Wire a `ChatTransport` backed by `MuseGateway`:
+To complete a live Watch exchange:
 
-1. Acquire the admission URL and token from an authenticated Muse session
-   (outside the watch app for now — do not ship browser cookies to the watch).
-2. Implement the `MuseGateway.Verifier` with the VM/attestation checks.
-3. `GET /chat/history` for the thread list, `POST /chat/stream` to send,
-   `POST /chat/subscribe` for deltas, reconciling repeats by message ID.
-4. Keep the Messages UI; replace `DemoTransport` in `MuseWatchApp.swift`.
+1. Provide a supported Muse session handoff; the simulator Cookie import is
+   only a research path for an already signed-in web session.
+2. Implement the web client's notary delegation endorser and complete
+   independent standard-VM identity checks. Add confidential-VM attestation
+   and recovery-proof verification before enabling those VMs.
+3. Use a fresh authorized session to verify admission, Noise, one `/chat/stream`
+   send, and the assistant response on the Watch simulator.
+4. Add history-backed thread loading and subscription cursor reconciliation
+   after the one-turn send/receive flow is live.

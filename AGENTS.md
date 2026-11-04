@@ -8,7 +8,7 @@ This repository is research toward an Apple Watch client for Muse. It has three 
 
 1. **Node.js protocol prototype** — implements experimental Noise XX, protobuf gateway framing, an admission-token helper, and a confidential-VM proof calculation. The gateway prototype has been used in a live standard-VM experiment, but does not independently establish peer trust or complete sign-in/attestation.
 2. **`MuseKit` Swift package** — a watchOS-compatible port of Noise, protobuf framing, chunking/reassembly, and WebSocket gateway handling. It is checked against deterministic vectors from the Node prototype. Vector parity is not proof of live Swift interoperability.
-3. **`WatchApp/`** — a SwiftUI watchOS shell with a Messages-style thread and chat screen. It currently uses `DemoTransport`; it is not connected to `MuseGateway`.
+3. **`WatchApp/`** — a SwiftUI watchOS shell with a Messages-style thread and chat screen. Normal launches use `DemoTransport`; debug simulator builds also contain an experimental Muse session and gateway path that is not live-verified end to end.
 
 Do not describe this repository as a production client. It does not implement Muse sign-in, a supported Watch session handoff, independent server/VM trust verification, or full confidential-VM attestation.
 
@@ -40,7 +40,7 @@ Treat these notes as research records, not a stable Muse API specification. When
 | `Checks/` | Swift command-line checks and checked-in deterministic fixtures. |
 | `tests/` | Synthetic Node checks for Noise and the admission helper; they do not contact Muse. |
 | `WatchApp/MuseChatUI/` | SwiftUI screens, theme, chat models, and the `ChatTransport` seam. |
-| `WatchApp/MuseWatchApp.swift` | App entry point; currently injects `DemoTransport`. |
+| `WatchApp/MuseWatchApp.swift` | App entry point; uses `DemoTransport` normally and exposes the debug simulator setup path. |
 | `WatchApp/project.yml` | XcodeGen project description. The generated Xcode project is committed separately. |
 | `.github/workflows/watch.yml` | CI protocol checks and unsigned watch simulator build/screenshot job. |
 
@@ -50,7 +50,7 @@ There is no Node package manifest. Current Node modules use built-in APIs. `muse
 
 - Never commit a HAR, browser profile, session cookie, access token, admission token, notary token, OAuth callback URL, or private recovery key. `*.har` and `.env` are ignored, but verify `git status` before staging and never force-add captures.
 - HAR files and full `wss://.../v1/noise` URLs can contain live credentials. Do not print their query values, paste them into logs, fixtures, issues, or documentation, or include them in crash reports. Use placeholders and describe only the schema.
-- Never use a captured credential for new live requests. Never send a chat prompt or create a Muse session unless the user explicitly asks for a live interaction in the current task.
+- Captured credentials may be reused only for a user-authorized personal live test on that user's own account. Keep them in the simulator Keychain or process memory, never print or persist them in source, fixtures, logs, or docs, and clear them when the test is done. Never send a chat prompt or create a Muse session unless the user explicitly asks for a live interaction in the current task.
 - Do not weaken or bypass the peer verifier to make a handshake succeed. Verify server static key, VM identity, downgrade expectations, and any required attestation before Noise message 3. A format check is not identity verification.
 - Keep tests and fixtures deterministic and synthetic. Fixed keys are permitted only for fixtures; production paths must use fresh cryptographic randomness.
 - Keep access tokens and recovery material out of persistent logs. Clear in-memory credentials when the session/owner changes and reject asynchronous results from an invalidated credential generation.

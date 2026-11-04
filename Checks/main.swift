@@ -34,6 +34,17 @@ func run(_ name: String, _ body: () throws -> Void) {
     }
 }
 
+@MainActor
+func runAsync(_ name: String, _ body: () async throws -> Void) async {
+    do {
+        try await body()
+        print("PASS \(name)")
+    } catch {
+        failures += 1
+        print("FAIL \(name): \(error)")
+    }
+}
+
 // MARK: - Fixtures
 
 struct Vectors {
@@ -61,6 +72,30 @@ struct Vectors {
 enum CheckError: Error {
     case fixtureMissing
     case malformed(String)
+}
+
+actor MemoryPeerPinStore: MusePeerPinStore {
+    private var pins: [String: MusePeerPin] = [:]
+
+    func load(ownerID: String, vmID: String) async throws -> MusePeerPin? {
+        pins[ownerID + "\0" + vmID]
+    }
+
+    func saveFirstUse(_ pin: MusePeerPin) async throws {
+        let key = pin.ownerID + "\0" + pin.vmID
+        guard pins[key] == nil else { throw MusePeerTrustError.pinStoreUnavailable }
+        pins[key] = pin
+    }
+}
+
+actor HTTPRequestRecorder {
+    private var storedRequest: MuseAuthenticatedHTTPRequest?
+
+    func record(_ request: MuseAuthenticatedHTTPRequest) {
+        storedRequest = request
+    }
+
+    func request() -> MuseAuthenticatedHTTPRequest? { storedRequest }
 }
 
 func hex(_ string: String) -> Data {
@@ -280,6 +315,161 @@ run("Reset frames decode") {
     checkEqual(decoded?.kind, .reset(code: 2, reason: "boom"), "reset payload")
 }
 
+run("Text chat request encodes the observed keys and omits absent session") {
+    let request = MuseChatTextRequest(
+        message: "Hello from Watch",
+        nodeID: "watch-node-1",
+        timezone: "America/New_York"
+    )
+    let json = try JSONValue.decode(JSONEncoder().encode(request))
+    check(json["message"] == .string("Hello from Watch"), "chat message field")
+    check(json["node_id"] == .string("watch-node-1"), "stable node ID field")
+    check(json["timezone"] == .string("America/New_York"), "timezone field")
+    check(json["session_id"] == nil, "new thread omits session ID")
+    check(json["capabilities"]?.arrayValue == [.string("delta_stream")], "only supported text capability is advertised")
+}
+
+run("Gateway target carries one VM ID and rejects mismatched or credential query data") {
+    let base = URL(string: "wss://hatch.metaaivm.com/")!
+    let target = try MuseGatewayTarget(gatewayAddress: base, vmID: "vm-one")
+    checkEqual(target.gatewayAddress.absoluteString, "wss://hatch.metaaivm.com/?vm_id=vm-one", "VM ID added to admission target")
+    checkEqual(target.vmID, "vm-one", "target retains selected VM ID")
+
+    let fromURL = try MuseGatewayTarget(
+        gatewayAddress: URL(string: "wss://hatch.metaaivm.com/?vm_id=vm-two")!
+    )
+    checkEqual(fromURL.vmID, "vm-two", "VM ID can be read from target URL")
+
+    do {
+        _ = try MuseGatewayTarget(
+            gatewayAddress: URL(string: "wss://hatch.metaaivm.com/?vm_id=vm-one")!,
+            vmID: "vm-two"
+        )
+        check(false, "mismatched VM ID should throw")
+    } catch let error as MuseAuthenticationError {
+        checkEqual(error, .invalidGatewayAddress, "mismatched VM ID rejected")
+    }
+
+    do {
+        _ = try MuseGatewayTarget(
+            gatewayAddress: URL(string: "wss://hatch.metaaivm.com/?auth_token=secret")!
+        )
+        check(false, "credential query should throw")
+    } catch let error as MuseAuthenticationError {
+        checkEqual(error, .invalidGatewayAddress, "credential query rejected")
+    }
+}
+
+run("Preauthorized gateway accepts a selected-VM token and preserves the browser URL shape") {
+    let rawToken = try MusePreauthorizedGateway("synthetic-token", expectedVMID: "vm-one")
+    checkEqual(rawToken.vmID, "vm-one", "raw token is scoped to the selected VM")
+    let rawComponents = URLComponents(url: rawToken.url, resolvingAgainstBaseURL: false)
+    checkEqual(rawComponents?.queryItems?.map(\.name), ["vm_id", "auth_token"], "raw token uses the minimal WebSocket query")
+    check(!rawToken.description.contains("synthetic-token"), "preauthorized URL description redacts credentials")
+
+    let browserURL = try MusePreauthorizedGateway(
+        "wss://hatch.metaaivm.com/v1/noise?vm_id=vm-one&auth_token=synthetic-token",
+        expectedVMID: "vm-one"
+    )
+    checkEqual(
+        URLComponents(url: browserURL.url, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name),
+        ["vm_id", "auth_token"],
+        "captured browser connection parameters stay unchanged"
+    )
+
+    for invalid in [
+        "wss://hatch.metaaivm.com/v1/noise?vm_id=vm-two&auth_token=synthetic-token",
+        "wss://untrusted.example/v1/noise?vm_id=vm-one&auth_token=synthetic-token",
+        "wss://hatch.metaaivm.com/v1/noise?vm_id=vm-one&auth_token=synthetic-token&auth_token=other",
+        "wss://hatch.metaaivm.com/v1/noise?vm_id=vm-one&auth_token=synthetic-token&debug=1"
+    ] {
+        do {
+            _ = try MusePreauthorizedGateway(invalid, expectedVMID: "vm-one")
+            check(false, "invalid preauthorized gateway should be rejected")
+        } catch let error as MuseAuthenticationError {
+            checkEqual(error, .invalidGatewayAddress, "invalid preauthorized gateway rejected")
+        }
+    }
+}
+
+run("Chat acknowledgement and completion records preserve dynamic payloads") {
+    let acknowledgement = JSONValue.object([
+        "type": .string("res"),
+        "payload": .object(["session_id": .string("session-42")])
+    ])
+    checkEqual(MuseChatProtocol.sessionID(in: acknowledgement), "session-42", "acknowledged session ID")
+
+    let completion = JSONValue.object([
+        "type": .string("event"),
+        "event": .string("delta.message_done"),
+        "payload": .object([
+            "transcript": .object([
+                "segments": .array([.object(["text": .string("Hello ")]), .object(["text": .string("Watch")])])
+            ]),
+            "future_field": .bool(true)
+        ])
+    ])
+    check(MuseChatProtocol.isCompletionEvent(completion), "completion event recognized")
+    checkEqual(MuseChatProtocol.completionText(in: completion), "Hello Watch", "assistant transcript extracted")
+}
+
+run("Peer trust recognizes owner challenges and keeps opaque standard payloads standard") {
+    let standardPayload = Data("standard-attestation-payload".utf8)
+    checkEqual(try MuseStandardPeerVerifier.classify(standardPayload), .standard, "opaque standard payload")
+
+    var unprovisionedChallenge = pbBytes(1, Data([0x01]))
+    unprovisionedChallenge.append(pbNumber(2, 1))
+    unprovisionedChallenge.append(pbBytes(3, Data(repeating: 0x22, count: 32)))
+    checkEqual(try MuseStandardPeerVerifier.classify(unprovisionedChallenge), .confidential, "unprovisioned owner challenge")
+
+    var provisionedChallenge = pbBytes(1, Data([0x02]))
+    provisionedChallenge.append(pbNumber(2, 2))
+    provisionedChallenge.append(pbBytes(3, Data(repeating: 0x33, count: 32)))
+    provisionedChallenge.append(pbBytes(4, Data(repeating: 0x44, count: 32)))
+    checkEqual(try MuseStandardPeerVerifier.classify(provisionedChallenge), .confidential, "provisioned owner challenge")
+
+    do {
+        _ = try MuseStandardPeerVerifier.classify(Data([0x1a, 0x80]))
+        check(false, "truncated VM nonce challenge should throw")
+    } catch let error as MusePeerTrustError {
+        checkEqual(error, .malformedOwnerChallenge, "malformed owner challenge rejected")
+    }
+}
+
+run("JSON Lines decoder preserves chunk boundaries and flushes the final record") {
+    var decoder = MuseJSONLinesDecoder()
+    let first = try decoder.append(Data("{\"type\":\"res\"}\n{\"type\":\"event\",\"event\":\"delta.".utf8))
+    checkEqual(first.count, 1, "complete acknowledgement decoded")
+    checkEqual(first.first?["type"]?.stringValue, "res", "acknowledgement preserved")
+    check(decoder.bufferedByteCount > 0, "incomplete event remains buffered")
+
+    let second = try decoder.append(Data("message_done\"}".utf8))
+    check(second.isEmpty, "unterminated event waits for body end")
+    let final = try decoder.finish()
+    checkEqual(final.count, 1, "final event decoded")
+    checkEqual(final.first?["event"]?.stringValue, "delta.message_done", "final event preserved")
+    checkEqual(decoder.bufferedByteCount, 0, "final bytes cleared")
+}
+
+run("History fallback escapes the session ID and reads assistant content") {
+    checkEqual(
+        MuseChatProtocol.historyPath(sessionID: "thread&42"),
+        "/chat/history?limit=20&session_id=thread%2642",
+        "session ID is query escaped"
+    )
+    let history = JSONValue.object([
+        "ok": .bool(true),
+        "result": .object([
+            "chat_events": .array([
+                .object(["role": .string("user"), "content": .string("Question")]),
+                .object(["role": .string("assistant"), "content": .array([.string("Answer")])])
+            ]),
+            "has_more": .bool(false)
+        ])
+    ])
+    checkEqual(MuseChatProtocol.latestAssistantText(in: history), "Answer", "latest assistant answer found")
+}
+
 run("Inconsistent chunk totals are rejected") {
     let assembler = ResponseAssembler()
     check(try assembler.feed(noiseChunk(id: 11, index: 0, total: 2, payload: Data([1]))) == nil, "first chunk buffered")
@@ -299,6 +489,82 @@ run("Malformed protobuf is rejected") {
     } catch {
         check(true, "truncated protobuf throws")
     }
+}
+
+await runAsync("Standard peer verification requires a first-use decision and pins the server key") {
+    let pinStore = MemoryPeerPinStore()
+    let serverKey = Data(repeating: 0x55, count: 32)
+    let hello = MuseGateway.Hello(
+        serverStaticPublicKey: serverKey,
+        handshakeHash: Data(repeating: 0, count: 32),
+        clientNonce: Data(repeating: 0x66, count: 32),
+        payload: Data("standard-payload".utf8)
+    )
+    let unapproved = MuseStandardPeerVerifier(
+        ownerID: "owner-1", vmID: "vm-1", allowFirstUse: false, pinStore: pinStore
+    )
+    do {
+        _ = try await unapproved.verify(hello)
+        check(false, "unapproved first-use key should throw")
+    } catch let error as MusePeerTrustError {
+        checkEqual(error, .firstUseApprovalRequired, "unapproved first-use key rejected")
+    }
+
+    let approved = MuseStandardPeerVerifier(
+        ownerID: "owner-1", vmID: "vm-1", allowFirstUse: true, pinStore: pinStore
+    )
+    let firstUsePayload = try await approved.verify(hello)
+    check(firstUsePayload.isEmpty, "first-use approval returns an empty standard handshake payload")
+
+    let existingPin = MuseStandardPeerVerifier(
+        ownerID: "owner-1", vmID: "vm-1", allowFirstUse: false, pinStore: pinStore
+    )
+    let matchingPayload = try await existingPin.verify(hello)
+    check(matchingPayload.isEmpty, "matching pinned key is accepted")
+
+    let changedKey = MuseGateway.Hello(
+        serverStaticPublicKey: Data(repeating: 0x77, count: 32),
+        handshakeHash: hello.handshakeHash,
+        clientNonce: hello.clientNonce,
+        payload: hello.payload
+    )
+    do {
+        _ = try await existingPin.verify(changedKey)
+        check(false, "changed server key should throw")
+    } catch let error as MusePeerTrustError {
+        checkEqual(error, .peerKeyChanged, "changed server key rejected")
+    }
+}
+
+await runAsync("VM wake uses the selected VM and source-observed request fields") {
+    let recorder = HTTPRequestRecorder()
+    let provider = MuseVMWakeProvider(fetch: { request in
+        await recorder.record(request)
+        return MuseAuthenticatedHTTPResponse(
+            statusCode: 200,
+            body: Data(#"{"status":"ready"}"#.utf8)
+        )
+    })
+    let status = try await provider.wake(
+        vmID: "vm-check",
+        retryCount: 2,
+        connectAttemptID: "attempt-check"
+    )
+    checkEqual(status, "ready", "wake status returned")
+
+    guard let request = await recorder.request() else {
+        throw CheckError.malformed("missing wake request")
+    }
+    checkEqual(request.url.absoluteString, "https://muse.ai/api/hatch/vm/wake", "wake endpoint")
+    checkEqual(request.method, "POST", "wake method")
+    check(request.noStore, "wake response is not stored")
+    guard let body = request.body,
+          let value = try? JSONValue.decode(body) else {
+        throw CheckError.malformed("invalid wake request body")
+    }
+    check(value["vm_id"] == .string("vm-check"), "selected VM ID in wake request")
+    check(value["retry_count"] == .number(2), "retry count in wake request")
+    check(value["connect_attempt_id"] == .string("attempt-check"), "connection attempt ID in wake request")
 }
 
 print(failures == 0 ? "\nAll \(passes) checks passed." : "\n\(failures) check(s) failed, \(passes) passed.")
